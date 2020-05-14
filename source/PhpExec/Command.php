@@ -2,6 +2,8 @@
 
 namespace PhpExec;
 
+
+use Closure;
 use Evenement\EventEmitter;
 
 class Command {
@@ -27,9 +29,10 @@ class Command {
 
     /**
      * @param string   $event
-     * @param \Closure $callback
+     * @param Closure $callback
      */
-    public function on($event, \Closure $callback) {
+    public function on($event, Closure $callback): void
+    {
         $this->_eventEmitter->on($event, $callback);
     }
 
@@ -38,13 +41,20 @@ class Command {
      * @throws Exception
      * @return Result
      */
-    public function run($input = null) {
+    public function run($input = null): Result
+    {
         $command = $this->_getCommand();
         $descriptorSpec = [
             0 => ["pipe", "r"], 1 => ["pipe", "w"], 2 => ["pipe", "w"]
         ];
 
-        $process = proc_open($command, $descriptorSpec, $pipes);
+        $cwd = NULL;
+        $env = NULL;
+        $options = NULL;
+        if($this->isWindows()) {
+            $options = ['bypass_shell' => true];
+        }
+        $process = proc_open($command, $descriptorSpec, $pipes, $cwd, $env, $options);
         if (!is_resource($process)) {
             throw new Exception('Cannot open command file pointer to `' . $command . '`');
         }
@@ -92,11 +102,20 @@ class Command {
     /**
      * @return string
      */
-    protected function _getCommand() {
-        $command = escapeshellcmd($this->_command);
-        foreach ($this->_arguments as $argument) {
-            $command .= ' ' . escapeshellarg($argument);
+    protected function _getCommand(): string
+    {
+        if(!$this->isWindows()) {
+            $command = escapeshellcmd($this->_command);
+            foreach ($this->_arguments as $argument) {
+                $command .= ' ' . escapeshellarg($argument);
+            }
+            return $command;
         }
-        return $command;
+        return '"' . str_replace('\\','\\\\',$this->_command) .'" ' . implode(' ',$this->_arguments);
+    }
+
+    private function isWindows(): bool
+    {
+        return stripos(strtoupper(PHP_OS), 'WIN') === 0;
     }
 }
